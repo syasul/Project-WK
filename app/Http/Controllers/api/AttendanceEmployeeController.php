@@ -45,9 +45,8 @@ class AttendanceEmployeeController extends Controller
         }
 
         // 3. Cek Lokasi (Geofencing)
-        // Kita cari lokasi terdekat yang valid (Masuk dalam radius)
         $validLocation = null;
-        $locations = Locations::all(); // Ambil semua master lokasi
+        $locations = Locations::all(); 
 
         foreach ($locations as $loc) {
             $distance = $this->calculateDistance(
@@ -57,10 +56,9 @@ class AttendanceEmployeeController extends Controller
                 $loc->longitude
             );
 
-            // Jika jarak user <= radius lokasi, maka valid
             if ($distance <= $loc->radius) {
                 $validLocation = $loc;
-                break; // Ketemu lokasi, stop loop
+                break; 
             }
         }
 
@@ -68,17 +66,15 @@ class AttendanceEmployeeController extends Controller
             return response()->json(['message' => 'Anda berada di luar jangkauan lokasi kantor/project.'], 403);
         }
 
-        // 4. Hitung Keterlambatan (Berdasarkan Shift User)
+        // 4. Hitung Keterlambatan
         $shift = Shifts::find($user->shift_id);
         $status = 'on_time';
         $lateMinutes = 0;
 
         if ($shift) {
             $clockInTime = Carbon::now();
-            // Gabungkan tanggal hari ini dengan jam masuk shift
             $shiftStartTime = Carbon::parse($today . ' ' . $shift->start_time);
 
-            // Jika absen lebih dari jam masuk + toleransi (misal 0 menit)
             if ($clockInTime->gt($shiftStartTime)) {
                 $status = 'late';
                 $lateMinutes = $shiftStartTime->diffInMinutes($clockInTime);
@@ -88,31 +84,57 @@ class AttendanceEmployeeController extends Controller
         // 5. Upload Foto Selfie
         $imagePath = null;
         if ($request->hasFile('photo')) {
-            // Simpan ke storage/app/public/attendance
             $file = $request->file('photo');
             $filename = 'att_' . $user->user_id . '_' . time() . '.' . $file->getClientOriginalExtension();
             $path = $file->storeAs('public/attendance', $filename);
-            
-            // Generate URL agar bisa diakses public (perlu: php artisan storage:link)
             $imagePath = url('storage/attendance/' . $filename);
         }
 
-        // 6. Simpan Data
+        // 6. Simpan Data Absen Karyawan
         try {
             $attendance = Attendances::create([
                 'user_id'           => $user->user_id,
-                'leader_id'         => $validLocation->leader_id ?? 1, // Default ke admin/id 1 jika null
-                'project_id'        => null, // Bisa dikembangkan jika lokasi terikat project
+                'leader_id'         => $validLocation->leader_id ?? 1, 
+                'project_id'        => null, 
                 'clock_in_time'     => Carbon::now(),
                 'status_attendance' => $status,
                 'late_minutes'      => $lateMinutes,
                 'latitude'          => $request->latitude,
                 'longitude'         => $request->longitude,
-                'image_url'         => $imagePath, // Tambahkan kolom ini di migration jika belum ada (atau pakai attachment)
+                'image_url'         => $imagePath,
             ]);
 
+            // =======================================================
+            // 7. LOGIKA BARU: OTOMATIS ABSENKAN LEADER 
+            // =======================================================
+            $leaderId = $validLocation->leader_id ?? 1; // Ambil ID leader dari lokasi
+
+            // Pastikan yang sedang absen saat ini BUKAN si leader itu sendiri
+            if ($user->user_id != $leaderId) {
+                // Cek apakah leader sudah absen hari ini?
+                $leaderAttendance = Attendances::where('user_id', $leaderId)
+                                        ->whereDate('clock_in_time', $today)
+                                        ->first();
+
+                // Jika leader belum absen, buatkan data otomatis!
+                if (!$leaderAttendance) {
+                    Attendances::create([
+                        'user_id'           => $leaderId,
+                        'leader_id'         => $leaderId, // Dia leadernya sendiri
+                        'project_id'        => null,
+                        'clock_in_time'     => Carbon::now(),
+                        'status_attendance' => 'on_time', // Leader selalu dianggap on_time
+                        'late_minutes'      => 0,
+                        'latitude'          => $request->latitude, // Pake lokasi karyawan
+                        'longitude'         => $request->longitude,
+                        'image_url'         => $imagePath, // Pake foto karyawan pertama sebagai bukti
+                    ]);
+                }
+            }
+            // =======================================================
+
             return response()->json([
-                'message' => 'Absen masuk berhasil!',
+                'message' => 'Absen masuk berhasil! Leader juga otomatis terabsen.',
                 'data' => $attendance
             ], 201);
 
@@ -129,7 +151,6 @@ class AttendanceEmployeeController extends Controller
         $user = $request->user();
         $today = Carbon::now()->format('Y-m-d');
 
-        // Cari absen hari ini yang belum clock out
         $attendance = Attendances::where('user_id', $user->user_id)
                                  ->whereDate('clock_in_time', $today)
                                  ->first();
@@ -142,10 +163,6 @@ class AttendanceEmployeeController extends Controller
             return response()->json(['message' => 'Anda sudah absen pulang sebelumnya.'], 400);
         }
 
-        // Validasi Lokasi saat pulang (Opsional, biasanya pulang bebas atau harus di kantor juga)
-        // Disini kita asumsikan pulang juga harus di lokasi, copy logic Geofencing di atas jika perlu.
-        // Untuk simpelnya, kita izinkan pulang dimana saja atau validasi lat/long required.
-
         $validator = Validator::make($request->all(), [
             'latitude'  => 'required',
             'longitude' => 'required',
@@ -155,7 +172,6 @@ class AttendanceEmployeeController extends Controller
             return response()->json(['message' => 'Lokasi diperlukan.', 'errors' => $validator->errors()], 422);
         }
 
-        // Hitung Early Leave / Overtime (Opsional Logic)
         $shift = Shifts::find($user->shift_id);
         $earlyMinutes = 0;
         $overtimeMinutes = 0;
@@ -166,7 +182,7 @@ class AttendanceEmployeeController extends Controller
 
             if ($now->lt($shiftEndTime)) {
                 $earlyMinutes = $now->diffInMinutes($shiftEndTime);
-                $attendance->status_attendance = 'early_leave'; // Update status jika pulang cepat
+                $attendance->status_attendance = 'early_leave'; 
             } else {
                 $overtimeMinutes = $now->diffInMinutes($shiftEndTime);
             }
@@ -191,7 +207,6 @@ class AttendanceEmployeeController extends Controller
     {
         $user = $request->user();
         
-        // Filter Bulan & Tahun (Default bulan ini)
         $month = $request->input('month', date('m'));
         $year = $request->input('year', date('Y'));
 
@@ -208,12 +223,11 @@ class AttendanceEmployeeController extends Controller
     }
 
     /**
-     * FUNGSI BANTUAN: Menghitung Jarak (Haversine Formula)
-     * Mengembalikan jarak dalam satuan Meter
+     * FUNGSI BANTUAN
      */
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)
     {
-        $earthRadius = 6371000; // Radius bumi dalam meter
+        $earthRadius = 6371000; 
 
         $dLat = deg2rad($lat2 - $lat1);
         $dLon = deg2rad($lon2 - $lon1);
@@ -224,8 +238,6 @@ class AttendanceEmployeeController extends Controller
 
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
-        $distance = $earthRadius * $c;
-
-        return $distance; // Hasil dalam meter
+        return $earthRadius * $c;
     }
 }
