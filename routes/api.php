@@ -3,7 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\auth\AuthEmployeeController;
-use App\Http\Controllers\Api\AttendanceEmployeeController;
+use App\Http\Controllers\api\AttendanceEmployeeController;
 
 // 1. Route Public (Login)
 Route::post('/login', [AuthEmployeeController::class, 'login']); 
