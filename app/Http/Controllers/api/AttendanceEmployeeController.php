@@ -326,4 +326,23 @@ class AttendanceEmployeeController extends Controller
             'data' => $leaves
         ], 200);
     }
+
+    public function leaveStats(Request $request)
+    {
+        $user = $request->user();
+        
+        $pending = Leaves::where('user_id', $user->user_id)->where('status', 'pending')->count();
+        $approved = Leaves::where('user_id', $user->user_id)->where('status', 'approved')->count();
+        $rejected = Leaves::where('user_id', $user->user_id)->where('status', 'rejected')->count();
+
+        return response()->json([
+            'message' => 'Statistik Izin',
+            'data' => [
+                'pending' => $pending,
+                'approved' => $approved,
+                'rejected' => $rejected,
+                'total' => $pending + $approved + $rejected
+            ]
+        ], 200);
+    }
 }
