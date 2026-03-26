@@ -18,5 +18,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/attendance/clock-in', [AttendanceEmployeeController::class, 'clockIn']);
     Route::post('/attendance/clock-out', [AttendanceEmployeeController::class, 'clockOut']);
     Route::get('/attendance/history', [AttendanceEmployeeController::class, 'history']);
+    Route::post('/leave', [App\Http\Controllers\Api\AttendanceEmployeeController::class, 'applyLeave']);
     Route::post('/logout', [AuthEmployeeController::class, 'logout']);
 });

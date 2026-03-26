@@ -65,4 +65,57 @@ class AttendanceController extends Controller
 
         return view('screens.manageAttendancePage', compact('mapData', 'date', 'attendances'));
     }
+
+    public function export(Request $request)
+    {
+        $query = Attendances::with('user');
+
+        // Terapkan filter yang sama saat export agar data yang diunduh sesuai dengan tampilan tabel
+        if ($request->has('status') && $request->status != '') {
+            $query->where('status_attendance', $request->status);
+        }
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $query->whereHas('user', function($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%');
+            });
+        }
+        if ($request->has('date') && $request->date != '') {
+            $query->whereDate('clock_in_time', $request->date);
+        }
+
+        $attendances = $query->orderBy('clock_in_time', 'desc')->get();
+        $fileName = 'Laporan_Absensi_' . date('d-m-Y_H-i') . '.csv';
+
+        $headers = array(
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        $columns = array('No', 'Nama Karyawan', 'Tanggal', 'Jam Masuk', 'Jam Pulang', 'Status', 'Titik Koordinat');
+
+        $callback = function() use($attendances, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            $row = 1;
+            foreach ($attendances as $data) {
+                fputcsv($file, array(
+                    $row++,
+                    $data->user->name ?? 'Unknown',
+                    $data->clock_in_time ? Carbon::parse($data->clock_in_time)->format('d-m-Y') : '-',
+                    $data->clock_in_time ? Carbon::parse($data->clock_in_time)->format('H:i:s') : '-',
+                    $data->clock_out_time ? Carbon::parse($data->clock_out_time)->format('H:i:s') : 'Belum Pulang',
+                    strtoupper($data->status_attendance),
+                    $data->latitude . ', ' . $data->longitude
+                ));
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
 }

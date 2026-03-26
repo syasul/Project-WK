@@ -13,6 +13,7 @@ use App\Models\Attendances;
 use App\Models\Locations;
 use App\Models\Shifts;
 use App\Models\User;
+use App\Models\Leaves;
 
 class AttendanceEmployeeController extends Controller
 {
@@ -239,5 +240,75 @@ class AttendanceEmployeeController extends Controller
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c;
+    }
+
+    public function applyLeave(Request $request)
+    {
+        // 1. Validasi Input
+        $validator = Validator::make($request->all(), [
+            'type'       => 'required|in:sick,permit,annual',
+            'start_date' => 'required|date',
+            'end_date'   => 'required|date|after_or_equal:start_date',
+            'reason'     => 'required|string',
+            'attachment' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:2048', // Max 2MB
+        ], [
+            'end_date.after_or_equal' => 'Tanggal selesai tidak boleh lebih awal dari tanggal mulai.',
+            'attachment.max' => 'Ukuran file maksimal 2MB.',
+            'attachment.mimes' => 'Format file harus JPG, PNG, atau PDF.'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validasi gagal', 
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $user = $request->user();
+
+        // 2. Cek apakah di rentang tanggal tersebut user sudah pernah mengajukan izin
+        $existingLeave = Leaves::where('user_id', $user->user_id)
+            ->where(function ($query) use ($request) {
+                $query->whereBetween('start_date', [$request->start_date, $request->end_date])
+                      ->orWhereBetween('end_date', [$request->start_date, $request->end_date]);
+            })
+            ->first();
+
+        if ($existingLeave) {
+            return response()->json([
+                'message' => 'Anda sudah memiliki pengajuan izin pada tanggal tersebut.'
+            ], 400);
+        }
+
+        // 3. Proses Upload File Lampiran (Jika Ada)
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            // Disimpan di folder storage/app/public/leaves
+            $attachmentPath = $request->file('attachment')->store('leaves', 'public');
+        }
+
+        // 4. Simpan ke Database
+        try {
+            $leave = Leaves::create([
+                'user_id'    => $user->user_id,
+                'type'       => $request->type,
+                'start_date' => $request->start_date,
+                'end_date'   => $request->end_date,
+                'reason'     => $request->reason,
+                'attachment' => $attachmentPath,
+                'status'     => 'pending', // Default status
+            ]);
+
+            return response()->json([
+                'message' => 'Pengajuan izin berhasil dikirim dan menunggu persetujuan.',
+                'data' => $leave
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Gagal menyimpan pengajuan izin.', 
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }

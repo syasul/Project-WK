@@ -44,6 +44,8 @@ Route::middleware(['auth'])->group(function () {
 
 Route::prefix('admin')->name('admin.')->group(function () {
        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+       Route::get('/dashboard/export', [App\Http\Controllers\admin\DashboardController::class, 'exportToday'])->name('dashboard.export');
+       Route::get('/dashboard/export-projects', [App\Http\Controllers\admin\DashboardController::class, 'exportProjects'])->name('dashboard.export-projects');
 
         // employee
         Route::delete('employees/bulk-delete', [EmployeeController::class, 'bulkDestroy'])->name('employees.bulkDestroy');
@@ -51,9 +53,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::patch('/employees/{user_id}/verify', [EmployeeController::class, 'verify'])->name('employees.verify');
         Route::patch('/employees/{user_id}/shift', [EmployeeController::class, 'updateShift'])->name('employees.updateShift');
         Route::patch('/employees/{user_id}/promote', [EmployeeController::class, 'promoteToLeader'])->name('employees.promote');
+        Route::get('/employees/export', [App\Http\Controllers\admin\EmployeeController::class, 'export'])->name('employees.export');
+        Route::post('/employees/import', [App\Http\Controllers\admin\EmployeeController::class, 'import'])->name('employees.import');
 
         // project
         Route::delete('projects/bulk-delete', [ProjectController::class, 'bulkDestroy'])->name('projects.bulkDestroy');
+        Route::get('/projects/export', [App\Http\Controllers\admin\ProjectController::class, 'export'])->name('projects.export');
         Route::resource('projects', ProjectController::class)->except(['show']);
 
         // shift
@@ -70,12 +75,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         // attendance
         Route::get('/attendances', [AttendanceController::class, 'index'])->name('attendances.index');
+        Route::get('/attendances/export', [App\Http\Controllers\admin\AttendanceController::class, 'export'])->name('attendances.export');
         Route::get('/attendances/map', [AttendanceController::class, 'map'])->name('attendances.map');
 
         // leave
         Route::get('/leaves', [LeaveController::class, 'index'])->name('leaves.index');
         Route::post('/leaves', [LeaveController::class, 'store'])->name('leaves.store');
-        Route::patch('/leaves/{id}/approve', [LeaveController::class, 'approveLeave'])->name('leaves.approve');
-        Route::patch('/leaves/{id}/reject', [LeaveController::class, 'rejectLeave'])->name('leaves.reject');
+        Route::get('/leaves/export', [App\Http\Controllers\admin\LeaveController::class, 'export'])->name('leaves.export');
+        Route::patch('/leaves/{leave_id}/approve', [LeaveController::class, 'approveLeave'])->name('leaves.approve');
+        Route::patch('/leaves/{leave_id}/reject', [LeaveController::class, 'rejectLeave'])->name('leaves.reject');
 
     });

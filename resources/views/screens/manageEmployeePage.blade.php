@@ -10,11 +10,23 @@
             <p class="text-sm text-slate-500 mt-1">Kelola seluruh data pegawai, jabatan, dan akses aplikasi.</p>
         </div>
         
-        <div class="flex items-center gap-3">
-            <button data-modal-target="add-employee-modal" data-modal-toggle="add-employee-modal" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm shadow-indigo-100">
-                <i class="fa-solid fa-user-plus mr-2"></i> Tambah Karyawan
-            </button>
-        </div>
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6" x-data="{ showSearch: true }">
+    
+
+    <div class="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0">
+        <button data-modal-target="import-employee-modal" data-modal-toggle="import-employee-modal" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 focus:ring-4 focus:ring-slate-100 transition shadow-sm whitespace-nowrap">
+            <i class="fa-solid fa-file-import mr-2 text-emerald-600"></i> Import CSV
+        </button>
+        
+        <a href="{{ route('admin.employees.export') }}" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 focus:ring-4 focus:ring-slate-100 transition shadow-sm whitespace-nowrap">
+            <i class="fa-solid fa-file-export mr-2 text-blue-600"></i> Export CSV
+        </a>
+
+        <button data-modal-target="add-employee-modal" data-modal-toggle="add-employee-modal" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm shadow-indigo-100 whitespace-nowrap">
+            <i class="fa-solid fa-user-plus mr-2"></i> Tambah Karyawan
+        </button>
+    </div>
+</div>
     </div>
 
     {{-- CARD WRAPPER --}}

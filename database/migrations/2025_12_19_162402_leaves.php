@@ -14,8 +14,8 @@ return new class extends Migration
             
             $table->enum('type', ['sick', 'permit', 'annual']); 
             $table->date('start_date');
-            $table->date('end_date');
-            $table->text('reason');
+            $table->date('end_date')->nullable();
+            $table->text('reason')->nullable();
             $table->string('attachment')->nullable();
             
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');

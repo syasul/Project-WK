@@ -43,9 +43,9 @@
                 </div>
             </form>
 
-            <button class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-xl text-sm px-5 py-2.5 shadow-sm transition flex items-center justify-center gap-2">
+            <a href="{{ route('admin.attendances.export', request()->query()) }}" class="text-white bg-green-600 hover:bg-green-700 font-medium rounded-xl text-sm px-5 py-2.5 shadow-sm transition flex items-center justify-center gap-2">
                 <i class="fa-solid fa-file-excel"></i> Export
-            </button>
+            </a>
         </div>
     </div>
 

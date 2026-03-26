@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Locations;
 use App\Models\Projects;
 use Illuminate\Http\Request;
+use Carbon\Carbon;
 
 class ProjectController extends Controller
 {
@@ -97,5 +98,60 @@ class ProjectController extends Controller
         Projects::whereIn('project_id', $ids)->delete();
 
         return redirect()->back()->with('success', count($ids) . ' Project berhasil dihapus.');
+    }
+
+    public function export(Request $request)
+    {
+        $query = Projects::with('location');
+
+        if ($request->has('status') && $request->status != '') {
+            $query->where('status', $request->status);
+        }
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('client_name', 'like', '%' . $search . '%')
+                  ->orWhere('project_code', 'like', '%' . $search . '%');
+            });
+        }
+
+        $projects = $query->orderBy('created_at', 'desc')->get();
+        $fileName = 'Data_Proyek_' . date('d-m-Y') . '.csv';
+
+        $headers = [
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $columns = ['No', 'Kode Proyek', 'Nama Proyek', 'Klien', 'Lokasi (Master)', 'Alamat Lengkap', 'Nilai Proyek (Rp)', 'Status Proyek', 'Status Pembayaran', 'Mulai', 'Selesai'];
+
+        $callback = function() use($projects, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            $row = 1;
+            foreach ($projects as $data) {
+                fputcsv($file, [
+                    $row++,
+                    $data->project_code,
+                    $data->name,
+                    $data->client_name ?? '-',
+                    $data->location->name ?? '-',
+                    $data->address ?? '-',
+                    $data->project_value ?? '0',
+                    strtoupper($data->status),
+                    strtoupper($data->payment_status),
+                    $data->start_date ? Carbon::parse($data->start_date)->format('d-m-Y') : '-',
+                    $data->end_date ? Carbon::parse($data->end_date)->format('d-m-Y') : '-'
+                ]);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }

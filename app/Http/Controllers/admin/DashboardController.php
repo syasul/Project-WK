@@ -14,46 +14,126 @@ use App\Models\Holidays; // Pastikan model Holidays sudah ada
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $today = Carbon::today();
+        $search = $request->input('search'); // Menangkap inputan pencarian
 
         // 1. STATISTIK UTAMA
         $stats = [
-            // Total Karyawan (Role Employee)
             'total_employees' => User::where('role', 'employee')->count(),
-            
-            // Verifikasi Pending (User baru yang belum verifikasi email)
             'pending_verifications' => User::whereNull('email_verified_at')->count(),
-            
-            // Project Aktif (Status Ongoing)
             'projects_active' => Projects::where('status', 'ongoing')->count(),
-            
-            // Project Belum Lunas (Payment bukan 'paid')
             'projects_unpaid' => Projects::where('payment_status', '!=', 'paid')->count(),
-            
-            // Kehadiran Hari Ini (Clock In hari ini)
             'attendance_today' => Attendances::whereDate('clock_in_time', $today)->count(),
-            
-            // Terlambat Hari Ini
             'late_today' => Attendances::whereDate('clock_in_time', $today)
                                     ->where('status_attendance', 'late')
                                     ->count(),
         ];
 
-        // 2. HARI LIBUR TERDEKAT (2 Data ke depan)
+        // 2. HARI LIBUR TERDEKAT
         $upcoming_holidays = Holidays::where('holiday_date', '>=', $today)
                                      ->orderBy('holiday_date', 'asc')
                                      ->take(2)
                                      ->get();
 
-        // 3. AKTIVITAS TERBARU (5 Absensi Terakhir hari ini)
-        $recent_activities = Attendances::with('user')
-                                        ->whereDate('clock_in_time', $today)
-                                        ->orderBy('clock_in_time', 'desc')
-                                        ->take(5)
-                                        ->get();
+        // 3. AKTIVITAS TERBARU (Dengan Fitur Pencarian)
+        $query = Attendances::with('user')
+                            ->whereDate('clock_in_time', $today)
+                            ->orderBy('clock_in_time', 'desc');
 
-        return view('screens.dashboardPage', compact('stats', 'upcoming_holidays', 'recent_activities'));
+        // Jika ada pencarian nama karyawan
+        if ($search) {
+            $query->whereHas('user', function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%");
+            });
+        }
+
+        $recent_activities = $query->take(5)->get();
+
+        return view('screens.dashboardPage', compact('stats', 'upcoming_holidays', 'recent_activities', 'search'));
+    }
+
+    // FUNGSI UNTUK EXPORT LAPORAN HARI INI KE CSV/EXCEL
+    public function exportToday()
+    {
+        $today = Carbon::today();
+        $attendances = Attendances::with('user')
+                            ->whereDate('clock_in_time', $today)
+                            ->orderBy('clock_in_time', 'asc')
+                            ->get();
+
+        $fileName = 'Laporan_Absensi_' . date('d-m-Y') . '.csv';
+
+        $headers = array(
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        $columns = array('No', 'Nama Karyawan', 'Role', 'Jam Masuk', 'Jam Pulang', 'Status', 'Lokasi (Lat, Lng)');
+
+        $callback = function() use($attendances, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            $row = 1;
+            foreach ($attendances as $data) {
+                fputcsv($file, array(
+                    $row++,
+                    $data->user->name ?? 'Unknown',
+                    strtoupper($data->user->role ?? 'employee'),
+                    $data->clock_in_time ? Carbon::parse($data->clock_in_time)->format('H:i:s') : '-',
+                    $data->clock_out_time ? Carbon::parse($data->clock_out_time)->format('H:i:s') : 'Belum Pulang',
+                    strtoupper($data->status_attendance),
+                    $data->latitude . ', ' . $data->longitude
+                ));
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function exportProjects()
+    {
+        // Ambil semua data proyek, diurutkan dari yang terbaru
+        $projects = Projects::orderBy('created_at', 'desc')->get();
+
+        $fileName = 'Daftar_Proyek_' . date('d-m-Y') . '.csv';
+
+        $headers = array(
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        // Header kolom di Excel (Bisa disesuaikan dengan nama kolom di database kamu)
+        $columns = array('No', 'Nama Proyek', 'Status Proyek', 'Status Pembayaran', 'Tanggal Dibuat');
+
+        $callback = function() use($projects, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            $row = 1;
+            foreach ($projects as $data) {
+                fputcsv($file, array(
+                    $row++,
+                    $data->name ?? '-', // Pastikan kolom 'name' ada di tabel projects
+                    strtoupper($data->status ?? '-'),
+                    strtoupper($data->payment_status ?? '-'),
+                    $data->created_at ? Carbon::parse($data->created_at)->format('d-m-Y') : '-'
+                ));
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 }

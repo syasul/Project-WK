@@ -18,10 +18,14 @@
         </div>
         
         <div class="flex items-center gap-3">
-            <button id="btn-add-project" data-modal-target="add-project-modal" data-modal-toggle="add-project-modal" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm shadow-indigo-100">
-                <i class="fa-solid fa-plus mr-2"></i> Tambah Project
-            </button>
-        </div>
+    <a href="{{ route('admin.dashboard.export-projects') }}" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 hover:text-slate-900 focus:ring-4 focus:ring-slate-100 transition shadow-sm">
+        <i class="fa-solid fa-file-export mr-2 text-slate-400"></i> Export
+    </a>
+
+    <button id="btn-add-project" data-modal-target="add-project-modal" data-modal-toggle="add-project-modal" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm shadow-indigo-100">
+        <i class="fa-solid fa-plus mr-2"></i> Tambah Project
+    </button>
+</div>
     </div>
 
     <div class="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden mb-8">

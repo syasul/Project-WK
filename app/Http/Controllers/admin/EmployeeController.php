@@ -21,12 +21,13 @@ class EmployeeController extends Controller
         // Eager load 'shift' untuk efisiensi query
         $query = User::with('shift'); 
 
-        // Filter Pencarian (Nama atau Email)
+        // Filter Pencarian Dinamis (Nama, Email, atau Posisi)
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
             $query->where(function($q) use ($search) {
                 $q->where('name', 'like', '%' . $search . '%')
-                  ->orWhere('email', 'like', '%' . $search . '%');
+                  ->orWhere('email', 'like', '%' . $search . '%')
+                  ->orWhere('position', 'like', '%' . $search . '%'); // Tambahan cari berdasarkan posisi
             });
         }
 
@@ -43,13 +44,84 @@ class EmployeeController extends Controller
             $query->orderBy('created_at', 'desc');
         }
 
-        // Pagination 10 item per halaman
         $employees = $query->paginate(10);
-        
-        // Ambil semua shift untuk dropdown di modal
-        $shifts = Shifts::all();
+        $shifts = \App\Models\Shifts::all();
 
         return view('screens.manageEmployeePage', compact('employees', 'shifts'));
+    }
+
+    // FUNGSI EXPORT DATA KARYAWAN KE CSV
+    public function export()
+    {
+        $employees = User::with('shift')->orderBy('name', 'asc')->get();
+        $fileName = 'Data_Karyawan_' . date('d-m-Y') . '.csv';
+
+        $headers = array(
+            "Content-type"        => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        );
+
+        // Header Kolom CSV (Disesuaikan dengan Schema Database)
+        $columns = array('No', 'Nama', 'Email', 'No HP', 'Posisi/Jabatan', 'Role', 'Status', 'Shift', 'Tanggal Bergabung');
+
+        $callback = function() use($employees, $columns) {
+            $file = fopen('php://output', 'w');
+            fputcsv($file, $columns);
+
+            $row = 1;
+            foreach ($employees as $data) {
+                fputcsv($file, array(
+                    $row++,
+                    $data->name,
+                    $data->email,
+                    $data->phone ?? '-',
+                    $data->position ?? '-',
+                    strtoupper($data->role),
+                    strtoupper($data->status),
+                    $data->shift->name ?? 'Belum ada shift',
+                    $data->created_at ? \Carbon\Carbon::parse($data->created_at)->format('d-m-Y') : '-'
+                ));
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    // FUNGSI IMPORT DATA KARYAWAN DARI CSV
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:csv,txt'
+        ]);
+
+        $file = $request->file('file');
+        $handle = fopen($file->getPathname(), "r");
+        
+        $header = true;
+        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
+            if ($header) { $header = false; continue; } // Lewati judul kolom
+            
+            // Format CSV: 0=Nama, 1=Email, 2=Password, 3=Phone, 4=Position, 5=Role, 6=Status
+            User::updateOrCreate(
+                ['email' => $data[1]], // Mencegah duplikat data dengan mengecek Email
+                [
+                    'name' => $data[0],
+                    'password' => bcrypt(!empty($data[2]) ? $data[2] : 'password123'),
+                    'phone' => $data[3] ?? null,
+                    'position' => $data[4] ?? null,
+                    'role' => strtolower($data[5] ?? 'employee'),
+                    'status' => strtolower($data[6] ?? 'active'),
+                    'email_verified_at' => now(), // Otomatis verified saat di-import
+                ]
+            );
+        }
+        fclose($handle);
+
+        return redirect()->back()->with('success', 'Data karyawan berhasil diimport secara massal!');
     }
 
     /**

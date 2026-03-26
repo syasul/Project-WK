@@ -20,9 +20,17 @@
                 {{ \Carbon\Carbon::now()->isoFormat('dddd, D MMMM Y') }}
             </div>
             {{-- Tombol Export (Bisa dikembangkan nanti) --}}
-            <button type="button" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm">
-                <i class="fa-solid fa-download mr-2"></i> Export Laporan
-            </button>
+            <div class="flex gap-2">
+                {{-- Tombol Export Absensi --}}
+                <a href="{{ route('admin.dashboard.export') }}" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl hover:bg-indigo-100 focus:ring-4 focus:ring-indigo-100 transition shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-user-clock mr-2"></i> Export Absen
+                </a>
+
+                {{-- Tombol Export Proyek --}}
+                <a href="{{ route('admin.dashboard.export-projects') }}" class="inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 transition shadow-sm cursor-pointer">
+                    <i class="fa-solid fa-briefcase mr-2"></i> Export Proyek
+                </a>
+            </div>
         </div>
     </div>
 
