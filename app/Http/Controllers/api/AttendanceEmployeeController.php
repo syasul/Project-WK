@@ -311,4 +311,19 @@ class AttendanceEmployeeController extends Controller
             ], 500);
         }
     }
+
+    public function leaveHistory(Request $request)
+    {
+        $user = $request->user();
+        
+        // Ambil semua data izin milik user ini, urutkan dari yang terbaru
+        $leaves = Leaves::where('user_id', $user->user_id)
+                        ->orderBy('created_at', 'desc')
+                        ->get();
+
+        return response()->json([
+            'message' => 'Data riwayat pengajuan izin berhasil diambil',
+            'data' => $leaves
+        ], 200);
+    }
 }
