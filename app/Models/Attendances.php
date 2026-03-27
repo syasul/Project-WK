@@ -14,37 +14,23 @@ class Attendances extends Model
     protected $primaryKey = 'attendance_id';
 
     protected $fillable = [
-        'user_id', 
-        'leader_id', 
-        'project_id',
-        'clock_in_time', 
-        'clock_out_time',
-        'late_minutes', 
-        'early_leave_minutes', 
-        'overtime_minutes',
-        'status_attendance',
-        'latitude', 
-        'longitude',
-        'image_url'
+        'user_id', 'leader_id', 'project_id',
+        'clock_in_time', 'clock_out_time',
+        'latitude', 'longitude', 'latitude_out', 'longitude_out',
+        'image_url', 'image_out_url',
+        'late_minutes', 'early_leave_minutes', 'overtime_minutes',
+        'status_attendance'
     ];
 
     protected $casts = [
         'clock_in_time' => 'datetime',
         'clock_out_time' => 'datetime',
+        'late_minutes' => 'integer',
+        'early_leave_minutes' => 'integer',
+        'overtime_minutes' => 'integer',
     ];
 
-    public function user(): BelongsTo
-    { 
+    public function user(): BelongsTo { 
         return $this->belongsTo(User::class, 'user_id', 'user_id'); 
-    }
-
-    public function leader(): BelongsTo
-    { 
-        return $this->belongsTo(User::class, 'leader_id', 'user_id'); 
-    }
-
-    public function project(): BelongsTo
-    { 
-        return $this->belongsTo(Projects::class, 'project_id', 'project_id'); 
     }
 }

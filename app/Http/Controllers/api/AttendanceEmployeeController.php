@@ -22,126 +22,57 @@ class AttendanceEmployeeController extends Controller
      */
     public function clockIn(Request $request)
     {
-        // 1. Validasi Input
         $validator = Validator::make($request->all(), [
             'latitude'  => 'required',
             'longitude' => 'required',
-            'photo'     => 'required|image|max:2048', // Max 2MB
+            'photo'     => 'required|image|max:2048',
+            'project_id' => 'nullable'
         ]);
 
-        if ($validator->fails()) {
-            return response()->json(['message' => 'Data tidak lengkap/invalid', 'errors' => $validator->errors()], 422);
+        if ($validator->fails()) return response()->json($validator->errors(), 422);
+
+        $user = $request->user()->load('shift');
+        $now = Carbon::now();
+
+        // CEK: Apakah masih ada absen yang belum Checkout hari ini?
+        $stillOnDuty = Attendances::where('user_id', $user->user_id)
+            ->whereDate('clock_in_time', $now->toDateString())
+            ->whereNull('clock_out_time')
+            ->first();
+
+        if ($stillOnDuty) {
+            return response()->json(['message' => 'Anda harus Check-out dari lokasi sebelumnya sebelum pindah lokasi!'], 400);
         }
 
-        $user = $request->user();
-        $today = Carbon::now()->format('Y-m-d');
+        // CEK SHIFT: Hitung telat hanya jika ini absen pertama hari ini
+        $isFirstToday = !Attendances::where('user_id', $user->user_id)
+            ->whereDate('clock_in_time', $now->toDateString())
+            ->exists();
 
-        // 2. Cek apakah sudah absen hari ini?
-        $check = Attendances::where('user_id', $user->user_id)
-                            ->whereDate('clock_in_time', $today)
-                            ->first();
-
-        if ($check) {
-            return response()->json(['message' => 'Anda sudah melakukan absen masuk hari ini.'], 400);
-        }
-
-        // 3. Cek Lokasi (Geofencing)
-        $validLocation = null;
-        $locations = Locations::all(); 
-
-        foreach ($locations as $loc) {
-            $distance = $this->calculateDistance(
-                $request->latitude, 
-                $request->longitude, 
-                $loc->latitude, 
-                $loc->longitude
-            );
-
-            if ($distance <= $loc->radius) {
-                $validLocation = $loc;
-                break; 
-            }
-        }
-
-        if (!$validLocation) {
-            return response()->json(['message' => 'Anda berada di luar jangkauan lokasi kantor/project.'], 403);
-        }
-
-        // 4. Hitung Keterlambatan
-        $shift = Shifts::find($user->shift_id);
-        $status = 'on_time';
         $lateMinutes = 0;
-
-        if ($shift) {
-            $clockInTime = Carbon::now();
-            $shiftStartTime = Carbon::parse($today . ' ' . $shift->start_time);
-
-            if ($clockInTime->gt($shiftStartTime)) {
-                $status = 'late';
-                $lateMinutes = $shiftStartTime->diffInMinutes($clockInTime);
+        if ($isFirstToday && $user->shift) {
+            $startTime = Carbon::parse($now->toDateString() . ' ' . $user->shift->start_time);
+            if ($now->gt($startTime)) {
+                $lateMinutes = $now->diffInMinutes($startTime);
             }
         }
 
-        // 5. Upload Foto Selfie
-        $imagePath = null;
-        if ($request->hasFile('photo')) {
-            $file = $request->file('photo');
-            $filename = 'att_' . $user->user_id . '_' . time() . '.' . $file->getClientOriginalExtension();
-            $path = $file->storeAs('public/attendance', $filename);
-            $imagePath = url('storage/attendance/' . $filename);
-        }
+        // Simpan Foto
+        $path = $request->file('photo')->store('attendance', 'public');
+        $imageUrl = url('storage/' . $path);
 
-        // 6. Simpan Data Absen Karyawan
-        try {
-            $attendance = Attendances::create([
-                'user_id'           => $user->user_id,
-                'leader_id'         => $validLocation->leader_id ?? 1, 
-                'project_id'        => null, 
-                'clock_in_time'     => Carbon::now(),
-                'status_attendance' => $status,
-                'late_minutes'      => $lateMinutes,
-                'latitude'          => $request->latitude,
-                'longitude'         => $request->longitude,
-                'image_url'         => $imagePath,
-            ]);
+        $attendance = Attendances::create([
+            'user_id' => $user->user_id,
+            'project_id' => $request->project_id,
+            'clock_in_time' => $now,
+            'latitude' => $request->latitude,
+            'longitude' => $request->longitude,
+            'image_url' => $imageUrl,
+            'late_minutes' => $lateMinutes,
+            'status_attendance' => ($lateMinutes > 0) ? 'late' : 'on_duty'
+        ]);
 
-            // =======================================================
-            // 7. LOGIKA BARU: OTOMATIS ABSENKAN LEADER 
-            // =======================================================
-            $leaderId = $validLocation->leader_id ?? 1; // Ambil ID leader dari lokasi
-
-            // Pastikan yang sedang absen saat ini BUKAN si leader itu sendiri
-            if ($user->user_id != $leaderId) {
-                // Cek apakah leader sudah absen hari ini?
-                $leaderAttendance = Attendances::where('user_id', $leaderId)
-                                        ->whereDate('clock_in_time', $today)
-                                        ->first();
-
-                // Jika leader belum absen, buatkan data otomatis!
-                if (!$leaderAttendance) {
-                    Attendances::create([
-                        'user_id'           => $leaderId,
-                        'leader_id'         => $leaderId, // Dia leadernya sendiri
-                        'project_id'        => null,
-                        'clock_in_time'     => Carbon::now(),
-                        'status_attendance' => 'on_time', // Leader selalu dianggap on_time
-                        'late_minutes'      => 0,
-                        'latitude'          => $request->latitude, // Pake lokasi karyawan
-                        'longitude'         => $request->longitude,
-                        'image_url'         => $imagePath, // Pake foto karyawan pertama sebagai bukti
-                    ]);
-                }
-            }
-            // =======================================================
-
-            return response()->json([
-                'message' => 'Absen masuk berhasil! Leader juga otomatis terabsen.',
-                'data' => $attendance
-            ], 201);
-
-        } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal menyimpan data.', 'error' => $e->getMessage()], 500);
-        }
+        return response()->json(['message' => 'Check-in berhasil di lokasi proyek.', 'data' => $attendance], 201);
     }
 
     /**
@@ -149,56 +80,50 @@ class AttendanceEmployeeController extends Controller
      */
     public function clockOut(Request $request)
     {
-        $user = $request->user();
-        $today = Carbon::now()->format('Y-m-d');
+        $user = $request->user()->load('shift');
+        $now = Carbon::now();
 
         $attendance = Attendances::where('user_id', $user->user_id)
-                                 ->whereDate('clock_in_time', $today)
-                                 ->first();
+            ->whereNull('clock_out_time')
+            ->latest()
+            ->first();
 
-        if (!$attendance) {
-            return response()->json(['message' => 'Anda belum melakukan absen masuk hari ini.'], 400);
-        }
+        if (!$attendance) return response()->json(['message' => 'Data Check-in tidak ditemukan!'], 404);
 
-        if ($attendance->clock_out_time) {
-            return response()->json(['message' => 'Anda sudah absen pulang sebelumnya.'], 400);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'latitude'  => 'required',
-            'longitude' => 'required',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['message' => 'Lokasi diperlukan.', 'errors' => $validator->errors()], 422);
-        }
-
-        $shift = Shifts::find($user->shift_id);
-        $earlyMinutes = 0;
-        $overtimeMinutes = 0;
+        // Perhitungan Pulang Cepat & Lembur (Dibandingkan dengan Shift End)
+        $earlyLeave = 0;
+        $overtime = 0;
         
-        if ($shift) {
-            $now = Carbon::now();
-            $shiftEndTime = Carbon::parse($today . ' ' . $shift->end_time);
-
-            if ($now->lt($shiftEndTime)) {
-                $earlyMinutes = $now->diffInMinutes($shiftEndTime);
-                $attendance->status_attendance = 'early_leave'; 
-            } else {
-                $overtimeMinutes = $now->diffInMinutes($shiftEndTime);
+        if ($user->shift) {
+            $endTime = Carbon::parse($now->toDateString() . ' ' . $user->shift->end_time);
+            
+            // Anggap ini checkout terakhir jika user mengirim flag 'is_final' dari Flutter
+            if ($request->is_final == true) {
+                if ($now->lt($endTime)) {
+                    $earlyLeave = $now->diffInMinutes($endTime);
+                } else {
+                    $overtime = $now->diffInMinutes($endTime);
+                }
             }
         }
 
+        // Simpan Foto Pulang (Jika ada)
+        $imageOutUrl = null;
+        if ($request->hasFile('photo')) {
+            $pathOut = $request->file('photo')->store('attendance_out', 'public');
+            $imageOutUrl = url('storage/' . $pathOut);
+        }
+
         $attendance->update([
-            'clock_out_time'      => Carbon::now(),
-            'early_leave_minutes' => $earlyMinutes,
-            'overtime_minutes'    => $overtimeMinutes,
+            'clock_out_time' => $now,
+            'latitude_out' => $request->latitude,
+            'longitude_out' => $request->longitude,
+            'image_out_url' => $imageOutUrl,
+            'early_leave_minutes' => $earlyLeave,
+            'overtime_minutes' => $overtime,
         ]);
 
-        return response()->json([
-            'message' => 'Absen pulang berhasil. Hati-hati di jalan!',
-            'data' => $attendance
-        ]);
+        return response()->json(['message' => 'Check-out berhasil.', 'data' => $attendance]);
     }
 
     /**

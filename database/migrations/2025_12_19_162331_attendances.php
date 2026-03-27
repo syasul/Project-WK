@@ -10,29 +10,34 @@ return new class extends Migration
     {
         Schema::create('attendances', function (Blueprint $table) {
             $table->id('attendance_id');
-            
-            // Relasi
             $table->foreignId('user_id')->constrained('users', 'user_id')->onDelete('cascade');
-            $table->foreignId('leader_id')->constrained('users', 'user_id')->onDelete('cascade');
+            
+            // leader_id nullable karena bisa absen mandiri via GPS
+            $table->foreignId('leader_id')->nullable()->constrained('users', 'user_id')->onDelete('set null');
             $table->foreignId('project_id')->nullable()->constrained('projects', 'project_id')->onDelete('set null');
             
-            // Waktu Scan
             $table->dateTime('clock_in_time');
             $table->dateTime('clock_out_time')->nullable();
             
-            // Kalkulasi Otomatis
+            // Lokasi Masuk & Pulang
+            $table->string('latitude'); 
+            $table->string('longitude');
+            $table->string('latitude_out')->nullable();
+            $table->string('longitude_out')->nullable();
+            
+            // Bukti Foto Selfie
+            $table->string('image_url'); // Foto Masuk
+            $table->string('image_out_url')->nullable(); // Foto Pulang
+            
+            // Kalkulasi Menit (Global Shift)
             $table->integer('late_minutes')->default(0); 
             $table->integer('early_leave_minutes')->default(0);
             $table->integer('overtime_minutes')->default(0);
             
-            // Status Kehadiran
-            $table->enum('status_attendance', ['on_time', 'late', 'early_leave', 'holiday_entry'])->default('on_time');
+            // Tambahkan status 'on_duty'
+            $table->enum('status_attendance', ['on_time', 'late', 'early_leave', 'on_duty'])->default('on_duty');
             
-            // Lokasi Realtime User
-            $table->string('latitude');
-            $table->string('longitude');
-            
-            $table->softDeletes(); // Admin bisa koreksi jika salah scan
+            $table->softDeletes();
             $table->timestamps();
         });
     }
