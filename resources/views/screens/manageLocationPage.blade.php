@@ -173,8 +173,8 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const defaultLat = -6.200000; 
-        const defaultLng = 106.816666;
+        const defaultLat = -7.385598; 
+        const defaultLng = 112.7531393;
         let mapAdd, markerAdd, circleAdd;
         let mapEdit, markerEdit, circleEdit;
         let mapView, markerView, circleView;
